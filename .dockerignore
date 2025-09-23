@@ -1,0 +1,26 @@
+# Git files
+.git
+.gitignore
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment files
+.env
+
+# Documentation
+*.md
+
+# Temporary files and local storage
+temp/
+storage/
+
+# IDE/Editor specific
+.idea/
+.vscode/
+
+# Other
+.ghaymah.json
