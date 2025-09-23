@@ -1,0 +1,14 @@
+fastapi
+python-dotenv
+python-jose[cryptography]
+pydantic
+slowapi
+redis
+celery
+pydub
+cloudinary
+elevenlabs
+requests
+uvicorn
+python-multipart
+gevent

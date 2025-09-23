@@ -1,0 +1,50 @@
+version: "3.8"
+
+services:
+  redis:
+    image: "redis:7-alpine"
+    hostname: redis
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 1s
+      timeout: 3s
+      retries: 30
+
+  worker:
+    build: .
+    hostname: worker
+    env_file: .env
+    command: celery -A workers.tts_worker.celery_app worker --loglevel=info -P gevent
+    volumes:
+      - .:/app
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  api:
+    build: .
+    hostname: api
+    env_file: .env
+    command: >
+      bash -c "
+        echo 'Waiting for worker to be ready...'
+        while ! celery -A workers.tts_worker.celery_app -b redis://redis:6379/0 inspect ping; do
+          >&2 echo 'Celery worker not available yet - sleeping';
+          sleep 1;
+        done;
+        >&2 echo 'Celery worker is ready - starting Uvicorn';
+        uvicorn api.main:app --host 0.0.0.0 --port 8000 --reload;
+      "
+    volumes:
+      - .:/app
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      worker:
+        condition: service_started
