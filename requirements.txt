@@ -2,7 +2,6 @@ fastapi
 python-dotenv
 python-jose[cryptography]
 pydantic
-slowapi
 redis
 celery
 pydub
@@ -12,3 +11,4 @@ requests
 uvicorn
 python-multipart
 gevent
+httpx

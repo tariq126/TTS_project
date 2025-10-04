@@ -3,10 +3,14 @@
 import config
 from .elevenlabs import ElevenLabsProvider
 from .openai import OpenAIProvider
+from .ghaymah_pro import GhaymahProProvider
+from .kokoro import KokoroProvider
 
 PROVIDER_CLASS_MAP = {
     "ElevenLabsProvider": ElevenLabsProvider,
     "OpenAIProvider": OpenAIProvider,
+    "GhaymahProProvider": GhaymahProProvider,
+    "KokoroProvider": KokoroProvider,
 }
 
 # --- Dynamic Factory ---

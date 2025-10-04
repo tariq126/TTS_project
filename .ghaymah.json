@@ -1,0 +1,17 @@
+{
+  "id": "bc28c1aa-a5a6-4a0f-8c34-f7857d602bb4",
+  "name": "tts-projects5",
+  "projectId": "89a8b70c-49c3-430b-b3ec-7822f90037b3",
+  "ports": [
+    {
+      "expose": true,
+      "number": 8000
+    }
+  ],
+  "publicAccess": {
+    "enabled": true,
+    "domain": "auto"
+  },
+  "resourceTier": "t4",
+  "dockerFileName": "Dockerfile"
+}

@@ -1,7 +1,3 @@
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import os
 import json
 import time
@@ -10,11 +6,13 @@ from celery import Celery
 from datetime import timedelta
 from pydub import AudioSegment
 from cloudinary.uploader import upload
+from dotenv import load_dotenv
 
 from workers.providers import provider_factory
 from utils.redis_client import redis_client
 from utils.schemas import JobStatus
 
+from utils.logger import logger
 
 # --- Celery Initialization (Updated for Beat Scheduler) ---
 celery_app = Celery(
@@ -44,7 +42,7 @@ def cleanup_temp_files(max_age_seconds: int):
     """
     Scans the TEMP_DIR and deletes any files older than max_age_seconds.
     """
-    print(f"Running scheduled cleanup of files older than {max_age_seconds} seconds...")
+    logger.info(f"Running scheduled cleanup of files older than {max_age_seconds} seconds...")
     now = time.time()
     deleted_count = 0
     for filename in os.listdir(TEMP_DIR):
@@ -58,8 +56,8 @@ def cleanup_temp_files(max_age_seconds: int):
                     os.remove(file_path)
                     deleted_count += 1
         except Exception as e:
-            print(f"Error deleting file {file_path}: {e}")
-    print(f"Cleanup complete. Deleted {deleted_count} old file(s).")
+            logger.error(f"Error deleting file {file_path}: {e}")
+    logger.info(f"Cleanup complete. Deleted {deleted_count} old file(s).")
 # --- End New Task ---
 
 
@@ -80,13 +78,17 @@ def process_block(job_id, block_index, text, wait_after_ms, provider_name, voice
 
         provider.generate_audio(text=text, voice_id=voice_id, output_path=file_path)
 
-        result = upload(file_path, resource_type="video")
+        result = upload(file_path, resource_type="raw")
         cloud_url = result["secure_url"]
 
         pipe = redis_client.pipeline()
         current_urls_str = redis_client.hget(f"job:{job_id}", "block_urls")
         current_urls = json.loads(current_urls_str)
-        current_urls.append({"index": block_index, "url": cloud_url})
+        current_urls.append({
+            "index": block_index, 
+            "url": cloud_url,
+            "local_path": file_path
+        })
         pipe.hset(f"job:{job_id}", "block_urls", json.dumps(current_urls))
         pipe.hset(f"job:{job_id}", "status", JobStatus.PROCESSING)
         pipe.hincrby(f"job:{job_id}", "blocks_done", 1)
@@ -99,45 +101,43 @@ def process_block(job_id, block_index, text, wait_after_ms, provider_name, voice
 
     except Exception as e:
         redis_client.hset(f"job:{job_id}", "status", JobStatus.FAILED)
-        print(f"Error processing block {block_index} for job {job_id} using provider '{provider_name}': {e}")
+        logger.error(f"Error processing block {block_index} for job {job_id} using provider '{provider_name}': {e}")
     finally:
-        if file_path and os.path.exists(file_path):
-            os.remove(file_path)
+        # The local file is intentionally not deleted here.
+        # The scheduled cleanup task will handle it later.
+        pass
 
 
 @celery_app.task
 def combine_blocks(job_id):
-    """Downloads all blocks, combines them, and finalizes the job."""
-    downloaded_files = []
+    """Combines audio blocks from local files and finalizes the job."""
     final_path = os.path.join(TEMP_DIR, f"{job_id}_final.mp3")
 
     try:
         job_data = redis_client.hgetall(f"job:{job_id}")
         job = {k.decode('utf-8'): v.decode('utf-8') for k, v in job_data.items()}
 
-        block_urls_info = sorted(json.loads(job["block_urls"]), key=lambda x: x['index'])
-        blocks_info = json.loads(job["blocks"])
+        block_info = sorted(json.loads(job["block_urls"]), key=lambda x: x['index'])
+        blocks_config = json.loads(job["blocks"])
 
         final_audio = AudioSegment.empty()
 
-        for i, url_info in enumerate(block_urls_info):
-            local_path = os.path.join(TEMP_DIR, f"{job_id}_dl_block{i}.mp3")
-            downloaded_files.append(local_path)
+        for i, block_data in enumerate(block_info):
+            local_path = block_data["local_path"]
 
-            response = requests.get(url_info['url'])
-            with open(local_path, "wb") as f:
-                f.write(response.content)
+            if not os.path.exists(local_path):
+                raise FileNotFoundError(f"Local file not found for block {i}: {local_path}")
 
             audio_segment = AudioSegment.from_file(local_path)
             final_audio += audio_segment
 
-            wait_ms = blocks_info[i]["wait_after_ms"]
+            wait_ms = blocks_config[i]["wait_after_ms"]
             if wait_ms > 0:
                 final_audio += AudioSegment.silent(duration=wait_ms)
 
         final_audio.export(final_path, format="mp3")
 
-        result = upload(final_path, resource_type="video")
+        result = upload(final_path, resource_type="raw")
         final_url = result["secure_url"]
 
         redis_client.hset(f"job:{job_id}", "result_url", final_url)
@@ -145,9 +145,7 @@ def combine_blocks(job_id):
 
     except Exception as e:
         redis_client.hset(f"job:{job_id}", "status", JobStatus.FAILED)
-        print(f"Error combining blocks for job {job_id}: {e}")
+        logger.error(f"Error combining blocks for job {job_id}: {e}")
     finally:
-        # --- ## MODIFIED CLEANUP LOGIC ## ---
-        # The cleanup loop has been removed to keep the block files.
-        # The scheduled cleanup task will handle deleting them later.
+        # The cleanup of individual block files is handled by the scheduled task.
         pass

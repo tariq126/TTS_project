@@ -16,12 +16,15 @@ WORKDIR /app
 RUN addgroup --system app && adduser --system --group app
 
 # Install system dependencies for the application and for running all services
-RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg supervisor redis-server && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg supervisor redis-server curl && rm -rf /var/lib/apt/lists/*
 
 # Copy installed Python dependencies from the builder stage
 COPY --from=builder /usr/src/app/wheels /wheels
 COPY --from=builder /usr/src/app/requirements.txt .
 RUN pip install --no-cache /wheels/*
+
+# Verify outbound connectivity to the diacritizer service
+RUN curl -s --head https://arabic-tashkel-47a234e0f5bf.hosted.ghaymah.systems/diacritize
 
 # Copy the application code
 COPY . .

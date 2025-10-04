@@ -1,23 +1,17 @@
-from dotenv import load_dotenv
-
-load_dotenv()
-
 import os
 import uuid
 import json
+import httpx
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import List
 
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from dotenv import load_dotenv
+from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 from jose import JWTError, jwt
 from pydantic import BaseModel, Field
-
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
 
 import config
 from workers.providers import provider_factory
@@ -25,13 +19,12 @@ from utils.redis_client import redis_client
 from utils.schemas import JobStatus
 from workers.tts_worker import process_block
 
+from utils.logger import logger
+
 
 TEMP_DIR = "temp"
 
-limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 SECRET_KEY = os.getenv(
     "SECRET_KEY",
@@ -45,14 +38,15 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 # --- Models ---
 class TextBlock(BaseModel):
-    text: str = Field(..., min_length=1)
+    text: str = Field(..., min_length=1, max_length=1000)
     wait_after_ms: int = Field(0, ge=0)
     provider: str = Field("elevenlabs", description="The TTS provider to use for this block.")
     voice: str = Field("default", description="The voice to use for this block.")
+    arabic: bool = Field(False, description="Set to true to preprocess text for Arabic.")
 
 
 class TTSRequest(BaseModel):
-    blocks: List[TextBlock] = Field(..., min_length=1)
+    blocks: List[TextBlock] = Field(..., min_length=1, max_items=50)
 
 
 class Token(BaseModel):
@@ -111,27 +105,76 @@ async def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends(
 
 
 @app.get("/tts/providers", tags=["TTS Discovery"])
-def list_providers():
+def list_providers(current_user: dict = Depends(get_current_user)):
     return list(provider_factory.keys())
 
 
 @app.get("/tts/voices/{provider_name}", tags=["TTS Discovery"])
-def list_voices(provider_name: str):
+def list_voices(provider_name: str, current_user: dict = Depends(get_current_user)):
     if provider_name not in provider_factory:
         raise HTTPException(status_code=404, detail=f"Provider '{provider_name}' not found.")
     provider = provider_factory[provider_name]
     return provider.get_voices()
 
 
+# --- Placeholder for Arabic Preprocessing ---
+async def _preprocess_arabic_text(text: str) -> str:
+    """
+    Calls the diacritizer API to add diacritics to the given Arabic text.
+    """
+    logger.info(f"Using diacritizer URL: {config.DIACRITIZER_URL}")
+    if not config.DIACRITIZER_URL:
+        logger.warning("DIACRITIZER_URL is not set. Skipping Arabic preprocessing.")
+        return text
+
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                config.DIACRITIZER_URL,
+                json={"text": text},
+                timeout=10.0  # Set a timeout for the request
+            )
+            response.raise_for_status()  # Raise an exception for bad status codes
+            data = response.json()
+            processed_text = data.get("diacritized_text")
+            if not processed_text:
+                raise HTTPException(
+                    status_code=500,
+                    detail="Diacritizer API did not return processed text."
+                )
+            logger.info(f"Successfully diacritized text: {text} -> {processed_text}")
+            return processed_text
+    except httpx.RequestError as e:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Error connecting to the diacritizer API: {e}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"An unexpected error occurred during Arabic preprocessing: {e}"
+        )
+
+
 @app.post("/tts", status_code=status.HTTP_202_ACCEPTED, tags=["TTS Generation"])
-@limiter.limit("10/minute")
 async def create_tts_job(
-    request: Request,
     tts_request: TTSRequest,
     current_user: dict = Depends(get_current_user)
 ):
     job_id = str(uuid.uuid4())
-    blocks_data = [block.dict() for block in tts_request.blocks]
+
+    # --- Preprocessing Step ---
+    processed_blocks = []
+    for block in tts_request.blocks:
+        if block.arabic:
+            processed_text = await _preprocess_arabic_text(block.text)
+            # Create a new block with the processed text, keeping other fields the same
+            new_block = block.copy(update={"text": processed_text})
+            processed_blocks.append(new_block)
+        else:
+            processed_blocks.append(block)
+
+    blocks_data = [block.dict() for block in processed_blocks]
 
     for block in blocks_data:
         provider_name = block.get("provider")

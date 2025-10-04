@@ -1,7 +1,9 @@
+import os
 from dotenv import load_dotenv
 
 load_dotenv()
-import os
+
+DIACRITIZER_URL = os.getenv("DIACRITIZER_URL")
 
 TTS_PROVIDERS = {
 
@@ -360,6 +362,25 @@ TTS_PROVIDERS = {
             "cy-GB-NiaNeural": "cy-GB-NiaNeural",
             "zu-ZA-ThandoNeural": "zu-ZA-ThandoNeural",
             "zu-ZA-ThembaNeural": "zu-ZA-ThembaNeural"
+        }
+    },
+    "ghaymah_pro": {
+        "provider_class": "GhaymahProProvider",
+        "api_key": os.getenv("GHAYMAH_PRO_API_KEY"),
+        "api_base_url": os.getenv("GHAYMAH_PRO_API_BASE_URL"),
+        "DIACRITIZER_URL": DIACRITIZER_URL,
+        "voices": {
+            "male-1": "0",
+            "male-2": "1",
+            "female-1": "2",
+            "female-2": "3"
+        }
+    },
+    "kokoro": {
+        "provider_class": "KokoroProvider",
+        "api_base_url": os.getenv("KOKORO_API_BASE_URL"),
+        "voices": {
+            "default": "0"
         }
     }
 }
