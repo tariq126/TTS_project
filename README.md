@@ -39,6 +39,7 @@ This project is a service that converts text into speech. You can submit multipl
 2.  **Submit a TTS job:**
     ```bash
     curl -X POST -H "Authorization: Bearer <your_token>" -H "Content-Type: application/json" -d '{
+      "project_id": "<your_project_id>",
       "blocks": [
         {
           "text": "Hello from an OpenAI voice.",
@@ -308,6 +309,7 @@ Include this token in the `Authorization` header for all subsequent requests as 
     *   **Request Body** (JSON):
         ```json
         {
+          "project_id": "<your_project_id>",
           "blocks": [
             {
               "text": "Hello from an OpenAI voice.",

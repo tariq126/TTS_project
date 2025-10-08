@@ -5,7 +5,7 @@ import requests
 from celery import Celery
 from datetime import timedelta
 from pydub import AudioSegment
-from cloudinary.uploader import upload
+from integrations.storage import storage_manager
 from dotenv import load_dotenv
 
 from workers.providers import provider_factory
@@ -13,6 +13,7 @@ from utils.redis_client import redis_client
 from utils.schemas import JobStatus
 
 from utils.logger import logger
+from .hooks import on_block_completed, on_job_completed, on_block_failed, on_job_failed
 
 # --- Celery Initialization (Updated for Beat Scheduler) ---
 celery_app = Celery(
@@ -78,15 +79,15 @@ def process_block(job_id, block_index, text, wait_after_ms, provider_name, voice
 
         provider.generate_audio(text=text, voice_id=voice_id, output_path=file_path)
 
-        result = upload(file_path, resource_type="raw")
-        cloud_url = result["secure_url"]
+        upload_urls = storage_manager.upload(file_path, resource_type="raw")
+        cloud_url = upload_urls["primary_url"] # The primary URL is still treated as the main one
 
         pipe = redis_client.pipeline()
         current_urls_str = redis_client.hget(f"job:{job_id}", "block_urls")
         current_urls = json.loads(current_urls_str)
         current_urls.append({
-            "index": block_index, 
-            "url": cloud_url,
+            "index": block_index,
+            "urls": upload_urls,
             "local_path": file_path
         })
         pipe.hset(f"job:{job_id}", "block_urls", json.dumps(current_urls))
@@ -95,13 +96,18 @@ def process_block(job_id, block_index, text, wait_after_ms, provider_name, voice
         results = pipe.execute()
         new_done_count = results[-1]
 
+        project_id = redis_client.hget(f"job:{job_id}", "project_id").decode('utf-8')
+        on_block_completed(job_id, project_id, block_index, urls=upload_urls)
+
         total_blocks = int(redis_client.hget(f"job:{job_id}", "blocks_total"))
         if new_done_count >= total_blocks:
             combine_blocks.delay(job_id)
 
     except Exception as e:
         redis_client.hset(f"job:{job_id}", "status", JobStatus.FAILED)
-        logger.error(f"Error processing block {block_index} for job {job_id} using provider '{provider_name}': {e}")
+        error_message = f"Error processing block {block_index} for job {job_id} using provider '{provider_name}': {e}"
+        logger.error(error_message) # Keep the original log for now
+        on_block_failed(job_id, block_index, error=str(e))
     finally:
         # The local file is intentionally not deleted here.
         # The scheduled cleanup task will handle it later.
@@ -137,15 +143,19 @@ def combine_blocks(job_id):
 
         final_audio.export(final_path, format="mp3")
 
-        result = upload(final_path, resource_type="raw")
-        final_url = result["secure_url"]
+        upload_urls = storage_manager.upload(final_path, resource_type="raw")
+        final_url = upload_urls["primary_url"] # The primary URL is still the main result
 
         redis_client.hset(f"job:{job_id}", "result_url", final_url)
         redis_client.hset(f"job:{job_id}", "status", JobStatus.COMPLETED)
 
+        on_job_completed(job_id, final_urls=upload_urls)
+
     except Exception as e:
         redis_client.hset(f"job:{job_id}", "status", JobStatus.FAILED)
-        logger.error(f"Error combining blocks for job {job_id}: {e}")
+        error_message = f"Error combining blocks for job {job_id}: {e}"
+        logger.error(error_message) # Keep the original log for now
+        on_job_failed(job_id, error=str(e))
     finally:
         # The cleanup of individual block files is handled by the scheduled task.
         pass

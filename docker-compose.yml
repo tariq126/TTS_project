@@ -16,11 +16,13 @@ services:
     build: .
     hostname: worker
     env_file: .env
+    user: app
     command: celery -A workers.tts_worker.celery_app worker --loglevel=info -P gevent
     volumes:
       - .:/app
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
     depends_on:
       redis:
         condition: service_healthy
@@ -45,6 +47,7 @@ services:
       - "8000:8000"
     environment:
       - REDIS_URL=redis://redis:6379/0
+      - PYTHONPATH=/app
     depends_on:
       worker:
         condition: service_started

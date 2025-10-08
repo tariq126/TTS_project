@@ -66,13 +66,8 @@ class GhaymahProProvider(TTSProvider):
         """
         logger.info(f"Generating audio for text: '{text[:30]}...' with Ghaymah Pro voice: {voice_id}")
         
-        processed_text = text
-        if self._is_arabic(text):
-            logger.info("Arabic text detected, applying diacritization.")
-            processed_text = self._diacritize_text(text)
-        
         payload = {
-            "input": processed_text,
+            "input": text,
             "voice": voice_id,
             "response_format": "mp3",
             "speed": 1.0

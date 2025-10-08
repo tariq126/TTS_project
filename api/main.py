@@ -2,6 +2,8 @@ import os
 import uuid
 import json
 import httpx
+from integrations.graphql_client import graphql_client
+from config import GRAPHQL_ENABLED
 from datetime import datetime, timedelta, timezone
 from typing import List
 
@@ -46,6 +48,7 @@ class TextBlock(BaseModel):
 
 
 class TTSRequest(BaseModel):
+    project_id: str = Field(None, description="The ID of the project this TTS job belongs to.")
     blocks: List[TextBlock] = Field(..., min_length=1, max_items=50)
 
 
@@ -204,7 +207,8 @@ async def create_tts_job(
         "blocks_total": len(blocks_data),
         "blocks_done": 0,
         "block_urls": json.dumps([]),
-        "result_url": ""
+        "result_url": "",
+        "project_id": str(uuid.uuid4()) if not tts_request.project_id or tts_request.project_id in ("<your_project_id>", "your_project_id", "project_id") else tts_request.project_id
     }
 
     redis_client.hset(f"job:{job_id}", mapping=job_data)

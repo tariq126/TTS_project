@@ -1,0 +1,35 @@
+# config.yaml - Optional YAML configuration for the TTS project.
+# Environment variables will ALWAYS override the values set in this file.
+
+# -- General Application Settings --
+log_level: "INFO"
+metrics_enabled: false
+
+# -- Storage Provider Configuration --
+storage:
+  # Sets the default storage provider if STORAGE_BACKEND is not in the environment.
+  default_provider: "cloudinary" # Options: 'cloudinary' or 's3'
+  mirroring_enabled: false      # Set to true to upload to a secondary provider.
+
+  providers:
+    # S3 provider settings. Credentials should be set in .env
+    s3:
+      endpoint_url: ""
+      bucket_name: ""
+      region: ""
+
+# -- GraphQL Integration --
+graphql:
+  enabled: false
+  endpoint: ""
+  # The API key should be set via the GRAPHQL_API_KEY environment variable.
+
+# -- Celery Worker & Task Settings --
+celery:
+  task_max_retries: 3
+  task_retry_delay_seconds: 60
+
+# -- Temporary File Management --
+temp_storage:
+  # Default retention in seconds. Can be overridden by TEMP_RETENTION_SECONDS.
+  retention_seconds: 3600

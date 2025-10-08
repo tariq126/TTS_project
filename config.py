@@ -1,15 +1,34 @@
-import os
-from dotenv import load_dotenv
+from core.config_loader import raw_config
 
-load_dotenv()
+# --- Helper Functions ---
 
-DIACRITIZER_URL = os.getenv("DIACRITIZER_URL")
+def get_config(key: str, default=None):
+    """A helper function to get config values case-insensitively."""
+    return raw_config.get(key.lower(), default)
+
+def get_boolean_flag(key: str, default: bool = False) -> bool:
+    """Retrieves a feature flag and casts it to a boolean."""
+    value = raw_config.get(key.lower())
+    if value is None:
+        return default
+    return str(value).lower() in ['true', '1', 'yes']
+
+# --- Feature Flags ---
+
+STORAGE_BACKEND = get_config("storage_backend", "cloudinary")
+STORAGE_MIRRORING = get_boolean_flag("storage_mirroring", default=False)
+GRAPHQL_ENABLED = get_boolean_flag("graphql_enabled", default=False)
+
+# --- Service URLs and Keys ---
+
+DIACRITIZER_URL = get_config("DIACRITIZER_URL")
+
+# --- TTS Provider Configurations ---
 
 TTS_PROVIDERS = {
-
     "elevenlabs": {
         "provider_class": "ElevenLabsProvider",
-        "api_key": os.getenv("ELEVENLABS_API_KEY"),
+        "api_key": get_config("ELEVENLABS_API_KEY"),
         "voices": {
             "rachel": "21m00Tcm4TlvDq8ikWAM",
             "clyde": "2EiwWnXFnvU5JabPnv8n",
@@ -36,9 +55,9 @@ TTS_PROVIDERS = {
         }
     },
     "ghaymah": {
-        "provider_class": "OpenAIProvider", # Reusing the same logic
-        "api_key": os.getenv("GHAYMAH_API_KEY"),
-        "base_url": os.getenv("GHAYMAH_API_BASE_URL"),
+        "provider_class": "OpenAIProvider",
+        "api_key": get_config("GHAYMAH_API_KEY"),
+        "base_url": get_config("GHAYMAH_API_BASE_URL"),
         "voices": {
             "af-ZA-AdriNeural": "af-ZA-AdriNeural",
             "af-ZA-WillemNeural": "af-ZA-WillemNeural",
@@ -366,8 +385,8 @@ TTS_PROVIDERS = {
     },
     "ghaymah_pro": {
         "provider_class": "GhaymahProProvider",
-        "api_key": os.getenv("GHAYMAH_PRO_API_KEY"),
-        "api_base_url": os.getenv("GHAYMAH_PRO_API_BASE_URL"),
+        "api_key": get_config("GHAYMAH_PRO_API_KEY"),
+        "api_base_url": get_config("GHAYMAH_PRO_API_BASE_URL"),
         "DIACRITIZER_URL": DIACRITIZER_URL,
         "voices": {
             "male-1": "0",
@@ -378,7 +397,7 @@ TTS_PROVIDERS = {
     },
     "kokoro": {
         "provider_class": "KokoroProvider",
-        "api_base_url": os.getenv("KOKORO_API_BASE_URL"),
+        "api_base_url": get_config("KOKORO_API_BASE_URL"),
         "voices": {
             "default": "0"
         }
