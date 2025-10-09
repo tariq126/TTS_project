@@ -2,12 +2,9 @@ import os
 import uuid
 import json
 import httpx
-from integrations.graphql_client import graphql_client
-from config import GRAPHQL_ENABLED
 from datetime import datetime, timedelta, timezone
 from typing import List
 
-from dotenv import load_dotenv
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
@@ -49,6 +46,7 @@ class TextBlock(BaseModel):
 
 class TTSRequest(BaseModel):
     project_id: str = Field(None, description="The ID of the project this TTS job belongs to.")
+    user_id: str = Field(..., description="The ID of the user submitting the job.")
     blocks: List[TextBlock] = Field(..., min_length=1, max_items=50)
 
 
@@ -165,6 +163,15 @@ async def create_tts_job(
     current_user: dict = Depends(get_current_user)
 ):
     job_id = str(uuid.uuid4())
+    
+    # --- Correctly handle project_id ---
+    project_id = tts_request.project_id
+    try:
+        # Try to parse the project_id as a UUID. If it fails, generate a new one.
+        uuid.UUID(project_id)
+    except (ValueError, TypeError):
+        project_id = str(uuid.uuid4())
+
 
     # --- Preprocessing Step ---
     processed_blocks = []
@@ -202,13 +209,14 @@ async def create_tts_job(
     job_data = {
         "status": JobStatus.QUEUED,
         "submitted_by": current_user["username"],
+        "user_id": tts_request.user_id,
         "submitted_at": datetime.now(timezone.utc).isoformat(),
         "blocks": json.dumps(blocks_data),
         "blocks_total": len(blocks_data),
         "blocks_done": 0,
         "block_urls": json.dumps([]),
         "result_url": "",
-        "project_id": str(uuid.uuid4()) if not tts_request.project_id or tts_request.project_id in ("<your_project_id>", "your_project_id", "project_id") else tts_request.project_id
+        "project_id": project_id
     }
 
     redis_client.hset(f"job:{job_id}", mapping=job_data)

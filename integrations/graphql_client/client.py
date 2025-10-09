@@ -34,18 +34,18 @@ class GraphQLClientAdapter:
     """
 
     INSERT_BLOCKS_MUTATION = """
-    mutation InsertBlocks($Data: jsonb, $job_id: String, $type: String, $time: timetz, $project_id: uuid) {
-        insert_Voice_Studio_Blocks(objects: {Data: $Data, job_id: $job_id, type: $type, time: $time, project_id: $project_id}) {
-            affected_rows
-            returning {
-                Data
-                job_id
-                type
-                time
-                id
-                project_id
-            }
+    mutation InsertBlocks($project_id: uuid, $content: String, $s3_url: String, $block_index: String, $created_at: timestamptz) {
+      insert_Voice_Studio_blocks(objects: {project_id: $project_id, content: $content, s3_url: $s3_url, block_index: $block_index, created_at: $created_at}) {
+        affected_rows
+        returning {
+          id
+          project_id
+          content
+          s3_url
+          block_index
+          created_at
         }
+      }
     }
     """
 
@@ -150,7 +150,7 @@ class GraphQLClientAdapter:
         variables = {"projectid": job_id, "project_link": audio_url}
         self._execute_mutation_with_retry(self.LINK_PROJECT_STORAGE_MUTATION, variables)
 
-    def insert_blocks(self, job_id: str, project_id: str, data: str, block_type: str, time: str):
+    def insert_blocks(self, project_id: str, content: str, s3_url: str, block_index: str, created_at: str):
         """
         Inserts a block into the Voice_Studio_Blocks table.
         """
@@ -159,11 +159,11 @@ class GraphQLClientAdapter:
             return
 
         variables = {
-            "job_id": job_id,
             "project_id": project_id,
-            "Data": data,
-            "type": block_type,
-            "time": time,
+            "content": content,
+            "s3_url": s3_url,
+            "block_index": block_index,
+            "created_at": created_at,
         }
         return self._execute_mutation_with_retry(self.INSERT_BLOCKS_MUTATION, variables)
 

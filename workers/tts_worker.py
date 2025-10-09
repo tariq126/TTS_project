@@ -1,12 +1,10 @@
 import os
 import json
 import time
-import requests
 from celery import Celery
 from datetime import timedelta
 from pydub import AudioSegment
 from integrations.storage import storage_manager
-from dotenv import load_dotenv
 
 from workers.providers import provider_factory
 from utils.redis_client import redis_client
@@ -80,7 +78,6 @@ def process_block(job_id, block_index, text, wait_after_ms, provider_name, voice
         provider.generate_audio(text=text, voice_id=voice_id, output_path=file_path)
 
         upload_urls = storage_manager.upload(file_path, resource_type="raw")
-        cloud_url = upload_urls["primary_url"] # The primary URL is still treated as the main one
 
         pipe = redis_client.pipeline()
         current_urls_str = redis_client.hget(f"job:{job_id}", "block_urls")
