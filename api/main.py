@@ -132,12 +132,18 @@ async def _preprocess_arabic_text(text: str) -> str:
         async with httpx.AsyncClient() as client:
             response = await client.post(
                 config.DIACRITIZER_URL,
-                json={"text": text},
+                json={
+                    "text": text,
+                    "max_length": 256,
+                    "num_beams": 4,
+                    "temperature": 0.2,
+                    "do_sample": False
+                },
                 timeout=10.0  # Set a timeout for the request
             )
             response.raise_for_status()  # Raise an exception for bad status codes
             data = response.json()
-            processed_text = data.get("diacritized_text")
+            processed_text = data.get("vocalized_text")
             if not processed_text:
                 raise HTTPException(
                     status_code=500,

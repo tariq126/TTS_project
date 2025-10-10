@@ -22,28 +22,6 @@ class GhaymahProProvider(TTSProvider):
             'Content-Type': 'application/json'
         }
 
-    def _is_arabic(self, text: str) -> bool:
-        """Check if the text contains Arabic characters."""
-        return any('\u0600' <= char <= '\u06FF' for char in text)
-
-    def _diacritize_text(self, text: str) -> str:
-        """Call the diacritization API to add diacritics to the text."""
-        logger.info(f"Using diacritizer URL: {self.diacritizer_url}")
-        if not self.diacritizer_url:
-            logger.warning("Diacritizer URL is not configured. Skipping diacritization.")
-            return text
-
-        try:
-            response = requests.post(self.diacritizer_url, json={"text": text})
-            response.raise_for_status()
-            return response.json()["diacritized_text"]
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Failed to call diacritization API: {e}")
-            return text  # Return original text on failure
-        except Exception as e:
-            logger.error(f"An unexpected error occurred during diacritization: {e}")
-            return text
-
     def _make_request(self, payload: dict, output_path: str):
         try:
             response = requests.post(self.api_base_url, headers=self.headers, json=payload, stream=True, timeout=60)
