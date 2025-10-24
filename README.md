@@ -203,10 +203,6 @@ tts_project/
 *   **JWT Authentication**: API endpoints are protected with JWT authentication.
 *   **Scheduled Cleanup**: A Celery Beat task automatically cleans up temporary files to conserve server resources.
 
-## Contributing
-
-Contributions are welcome! Please open an issue on GitHub to discuss any changes or new features.
-
 ## License
 
 This project is under a private license.
